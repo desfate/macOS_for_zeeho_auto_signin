@@ -1,0 +1,9 @@
+config/local.json
+logs/
+captures/
+ref/
+__pycache__/
+*.pyc
+.DS_Store
+macos/ZeehoSignin/Paths.swift
+scripts/com.zeeho.signin.plist
