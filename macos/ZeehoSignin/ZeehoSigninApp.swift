@@ -78,10 +78,11 @@ final class StatusStore: ObservableObject {
 
     init() {
         reload()
-        timer = Timer.publish(every: 30, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in self?.reload() }
         watchFile()
+        refreshFromNetwork()
+        timer = Timer.publish(every: 5 * 60, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in self?.pollNetwork() }
     }
 
     func reload() {
@@ -106,6 +107,12 @@ final class StatusStore: ObservableObject {
         runPython(["--status-only"])
     }
 
+    private func pollNetwork() {
+        guard !refreshing, !updatingToken else { return }
+        guard status.tokenInvalid != true else { return }
+        refreshFromNetwork()
+    }
+
     func updateToken(_ raw: String) {
         let token = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !token.isEmpty else {
@@ -118,8 +125,10 @@ final class StatusStore: ObservableObject {
 
     private func runPython(_ arguments: [String], updating: Bool = false, alert: Bool = false) {
         if refreshing {
-            lastError = "正在处理上一个请求，请稍后再试"
-            updatingToken = false
+            if updating || alert {
+                lastError = "正在处理上一个请求，请稍后再试"
+                updatingToken = false
+            }
             return
         }
         refreshing = true
