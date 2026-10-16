@@ -2,5 +2,7 @@
   "base_url": "https://h5.zeehoev.com",
   "token": "从极核 App 抓包得到的 UUID，不要带 Bearer 前缀",
   "app_id": "Sw5F9uJi",
-  "app_secret": "46870a8f678a09109468f5b0168818b91c292845"
+  "app_secret": "46870a8f678a09109468f5b0168818b91c292845",
+  "h5_app_id": "AiTXmBrm",
+  "h5_app_secret": "70c2c7458ab88ca9504ad0521f170075bc91f2f7"
 }

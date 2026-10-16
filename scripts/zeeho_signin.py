@@ -2,8 +2,10 @@
 """极核每日签到。
 
 流程对齐 https://github.com/MonicaGmm/zeeho-quanx 的 zeeho_checkin.js：
-  GET baseInfo → GET /signin（看 lastTime 是否今天）→ 未签则 POST /signin
-  → 再 GET /signin 回查 lastTime（不信任 POST 的 code）。
+  GET baseInfo → GET /H5/signin（看 lastTime 是否今天）→ 未签则 POST /H5/signin
+  → 再 GET /H5/signin 回查 lastTime（不信任 POST 的 code）。
+  2026-10-11 起签到接口迁到 /cfmotoservermine/H5/，并换发 H5 appId；
+  旧路径或旧 appId 会被网关拦成 30125 permit error。车辆接口仍走原生 tapi 密钥。
 """
 from __future__ import annotations
 
@@ -42,6 +44,11 @@ ZEEHO_UA = (
 OK_CODES = {"10000", "0", "200"}
 RETRY = 2
 TAPI_VEHICLE = "https://tapi.zeehoev.com/v1.0/app/cfmotoserverapp/vehicleHomePage/"
+# 2026-10-10 服务端换发的 H5 通道密钥（与原生 tapi 的 app_id 不是同一套）
+H5_APP_ID = "AiTXmBrm"
+H5_APP_SECRET = "70c2c7458ab88ca9504ad0521f170075bc91f2f7"
+H5_SIGNIN = "/cfmotoservermine/H5/signin"
+H5_SIGNIN_INFO = "/cfmotoservermine/H5/signin/info"
 TOKEN_UUID = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 )
@@ -143,8 +150,15 @@ class Client:
         ctx.verify_mode = ssl.CERT_NONE
         self.opener = build_opener(HTTPCookieProcessor(self.jar), HTTPSHandler(context=ctx))
 
+    def h5_creds(self) -> tuple[str, str]:
+        return (
+            str(self.cfg.get("h5_app_id") or H5_APP_ID),
+            str(self.cfg.get("h5_app_secret") or H5_APP_SECRET),
+        )
+
     def _headers(self, token: str, query: str, body: str) -> dict[str, str]:
-        sign, param = cfmoto_sign(self.cfg["app_id"], self.cfg["app_secret"], query, body)
+        app_id, secret = self.h5_creds()
+        sign, param = cfmoto_sign(app_id, secret, query, body)
         return {
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "zh-CN,zh;q=0.9",
@@ -370,7 +384,7 @@ def run_one(client: Client, token: str, idx: int, today: str, status_only: bool,
         if result["nickName"]:
             result["tag"] = f"账号{idx + 1}({result['nickName']})"
 
-    r2 = client.request_retry("GET", "/cfmotoservermine/signin", token)
+    r2 = client.request_retry("GET", H5_SIGNIN, token)
     if r2["status"] in {401, 403}:
         result["tokenInvalid"] = True
         result["msg"] = "Token 失效，请从 App 抓包后粘贴 Authorization"
@@ -384,7 +398,7 @@ def run_one(client: Client, token: str, idx: int, today: str, status_only: bool,
 
     r_info = client.request_retry(
         "GET",
-        "/cfmotoservermine/signin/info",
+        H5_SIGNIN_INFO,
         token,
         {"month": f"{int(today[:4])}-{int(today[5:7])}"},
     )
@@ -418,7 +432,7 @@ def run_one(client: Client, token: str, idx: int, today: str, status_only: bool,
         result["msg"] = result["msg"] or "今日未签到"
         return result
 
-    r3 = client.request_retry("POST", "/cfmotoservermine/signin", token)
+    r3 = client.request_retry("POST", H5_SIGNIN, token)
     result["posted"] = True
     post_code = ""
     post_msg = ""
@@ -429,7 +443,7 @@ def run_one(client: Client, token: str, idx: int, today: str, status_only: bool,
         result["msg"] = f"HTTP {r3['status']} 返回非 JSON"
         return result
 
-    r4 = client.request_retry("GET", "/cfmotoservermine/signin", token)
+    r4 = client.request_retry("GET", H5_SIGNIN, token)
     last2 = ""
     if is_ok(r4["json"]):
         summary = r4["json"].get("data") or {}
